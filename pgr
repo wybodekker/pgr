@@ -1,5 +1,5 @@
 #!/bin/bash
-Version=1.01
+Version=1.02
 Myname="${0##*/}"
 
 :<<'DOC'
@@ -23,14 +23,15 @@ nothing found. With the -k option, if there is only one match, the
 process is killed.
 
 = Author
-[Wybo Dekker](wybo@dekkerdocumenten.nl)
+[Wybo Dekker](wybodekker@me.com)
 
 = Copyright
 Released under the [GNU General Public License](www.gnu.org/copyleft/gpl.html)
 DOC
 
-Red='\e[38;5;1m'
+Red='\e[38;5;1m' Mag='\e[38;5;5m' Nor='\e[0m'
     die() { local i; for i; do echo -e "$Myname: $Red$i"; done 1>&2; exit 1; }
+   Warn() { local i; for i; do echo -e "$Myname: $Mag$i$Nor"; done 1>&2; }
 helpsrt() { sed -n '/^= Synopsis/,/^= /p' "$0"|sed '1d;$d'; exit; }
 helpall() { sed -n "/^:<<'DOC'$/,/^DOC/p" "$0"|sed '1d;$d'|
             less -P"$Myname-${Version/./·} (press h for help, q to quit)";exit; }
@@ -38,12 +39,12 @@ cmd="$0 $*"
 
 if ! options=$(getopt \
    -n "$Myname" \
-   -o khHVI \
-   -l kill,help,Help,version \
+   -o kfhHVI \
+   -l kill,force,help,Help,version \
    -- "$@"
 ); then exit 1; fi
 eval set -- "$options"
-kill=false
+kill=false force=false
 while [ $# -gt 0 ]; do
    case $1 in
       (-h|--help)         # print a help message and exit
@@ -58,6 +59,10 @@ while [ $# -gt 0 ]; do
 			  ;;
       (-k|--kill)         # kill process if only one match
 			  kill=true
+			  shift
+			  ;;
+      (-f|--force)        # kill processes even if multiple matches
+			  force=true
 			  shift
 			  ;;
       (-I)		  instscript "$0" ||
@@ -78,14 +83,25 @@ while read -r line; do
    [[ $line =~ $re ]] && {
       echo "$line"
       (( n++ ))
-      proc=${line%% *}
+      proc+=" ${line%% *}"
    }
 done < <(ps wwax) # ww for unlimited width, ax for all processes
+
 if $kill; then
-   if (( n == 1 )); then
-      kill -9 "$proc"
-      die killed
-   else
-      die "no or multiple matches: nothing killed"
-   fi
+   case $n in
+   (0) Warn "no match: nothing killed"
+       ;;
+   (1) kill -9 "$proc"
+       Warn "killed 1 process"
+       ;;
+   (*) if $force; then
+          eval "kill -9 $proc"
+          Warn "killed $n processes"
+       else
+          Warn "multiple matches: nothing killed"
+       fi
+   esac
 fi
+
+(( n>0 )) && exit 0
+exit 1
